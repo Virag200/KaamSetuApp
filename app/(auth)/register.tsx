@@ -1,13 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 export default function Register() {
@@ -50,6 +50,18 @@ export default function Register() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    let interval: any;
+
+    if (timer > 0) {
+      interval = setInterval(() => {
+        setTimer((prev) => prev - 1);
+      }, 1000);
+    }
+
+    return () => clearInterval(interval);
+  }, [timer]);
+
   const handleChange = (value: string, index: number) => {
     let newOtp = [...otp];
     newOtp[index] = value;
@@ -67,48 +79,86 @@ export default function Register() {
   };
 
   // OTP
-  const handleSendOTP = () => {
-    if (!email.includes("@")) {
-      setError("Enter valid email");
-      return;
-    }
+  const handleSendOTP = async () => {
+    try {
+      if (!email.includes("@")) {
+        setError("Enter valid email");
+        return;
+      }
 
-    setError("");
-    alert("OTP sent 📩");
-
-    setTimer(30); // start timer
-
-    const interval = setInterval(() => {
-      setTimer((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
+      const res = await fetch("http://172.23.36.127:8000/api/auth/send-otp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
       });
-    }, 1000);
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message);
+        return;
+      }
+
+      alert("OTP sent to email 📩");
+
+      setTimer(30);
+    } catch (err) {
+      console.log(err);
+      setError("Error sending OTP");
+    }
   };
 
-  const handleRegister = () => {
-    if (!name || !email || !password || !confirm || !phone) {
-      setError("Fill all required fields");
-      return;
-    }
+  const handleRegister = async () => {
+    try {
+      if (!name || !email || !password || !confirm || !phone) {
+        setError("Fill all required fields");
+        return;
+      }
 
-    if (password !== confirm) {
-      setError("Passwords do not match");
-      return;
-    }
+      if (password !== confirm) {
+        setError("Passwords do not match");
+        return;
+      }
 
-    const finalOtp = otp.join("");
-    if (!/^\d{4}$/.test(finalOtp)) {
-      setError("Enter valid 4-digit OTP");
-      return;
-    }
+      const finalOtp = otp.join("");
 
-    setError("");
-    alert("Registered Successfully ✅");
-    router.replace("/login");
+      if (!/^\d{4}$/.test(finalOtp)) {
+        setError("Enter valid OTP");
+        return;
+      }
+
+      const res = await fetch("http://172.23.36.127:8000/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name,
+          email,
+          phone,
+          password,
+          address,
+          skills: selectedTags,
+          otp: finalOtp, // 🔥 IMPORTANT
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message);
+        return;
+      }
+
+      alert("Registered Successfully ✅");
+
+      router.replace("/(auth)/login");
+    } catch (err) {
+      console.log(err);
+      setError("Server error");
+    }
   };
 
   return (
@@ -138,8 +188,14 @@ export default function Register() {
             />
           </View>
 
-          <TouchableOpacity style={styles.otpBtn} onPress={handleSendOTP}>
-            <Text style={{ fontSize: 12 }}>Verify OTP</Text>
+          <TouchableOpacity
+            style={styles.otpBtn}
+            onPress={handleSendOTP}
+            disabled={timer > 0}
+          >
+            <Text style={{ fontSize: 12 }}>
+              {timer > 0 ? `Wait ${timer}s` : "Verify OTP"}
+            </Text>
           </TouchableOpacity>
         </View>
 
